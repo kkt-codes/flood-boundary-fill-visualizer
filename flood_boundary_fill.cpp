@@ -9,11 +9,11 @@
 const int WINDOW_WIDTH = 850;
 const int WINDOW_HEIGHT = 600;
 const int CANVAS_SIZE = 600;
-const int GRID_SIZE = 40; // Increased resolution for better contrast shapes
+const int GRID_SIZE = 40; // Higher resolution for better contrast shapes
 const int CELL_SIZE = CANVAS_SIZE / GRID_SIZE;
 
 enum FillMode { FLOOD_FILL, BOUNDARY_FILL };
-enum CellState { EMPTY, BOUNDARY, FILLED, PATCH };
+enum CellState { EMPTY, BOUNDARY, FILLED, PATCH, WALL_RED, WALL_PURPLE, INTERIOR_YELLOW };
 
 // Global Execution States
 CellState grid[GRID_SIZE][GRID_SIZE];
@@ -28,13 +28,16 @@ int currentWindowWidth = WINDOW_WIDTH;
 int currentWindowHeight = WINDOW_HEIGHT;
 
 // High-Contrast UI Color Palette
-const float COLOR_BG[3]       = {0.09f, 0.10f, 0.12f}; 
-const float COLOR_GRID[3]     = {0.14f, 0.16f, 0.19f}; 
-const float COLOR_BOUND[3]    = {1.00f, 1.00f, 1.00f}; // White Walls
-const float COLOR_FLOOD[3]    = {0.00f, 0.80f, 0.55f}; // Emerald Green
-const float COLOR_BOUNDARY[3] = {0.95f, 0.40f, 0.10f}; // Blaze Orange
-const float COLOR_PATCH[3]    = {0.00f, 0.65f, 0.90f}; // Cyan Interiors
-const float COLOR_TEXT[3]     = {0.90f, 0.92f, 0.95f}; 
+const float COLOR_BG[3]          = {0.09f, 0.10f, 0.12f}; 
+const float COLOR_GRID[3]        = {0.14f, 0.16f, 0.19f}; 
+const float COLOR_BOUND[3]       = {1.00f, 1.00f, 1.00f}; // White Walls
+const float COLOR_FLOOD[3]       = {0.00f, 0.80f, 0.55f}; // Emerald Green
+const float COLOR_BOUNDARY[3]    = {0.95f, 0.40f, 0.10f}; // Blaze Orange
+const float COLOR_PATCH[3]       = {0.00f, 0.65f, 0.90f}; // Cyan Interiors
+const float COLOR_TEXT[3]        = {0.90f, 0.92f, 0.95f}; 
+const float COLOR_WALL_RED[3]    = {1.00f, 0.25f, 0.25f}; // Vibrant Red
+const float COLOR_WALL_PURPLE[3] = {0.75f, 0.20f, 0.95f}; // Electric Purple
+const float COLOR_INT_YELLOW[3]  = {1.00f, 0.85f, 0.00f}; // Amber Yellow Interior
 
 void clearGridData() {
     for (int r = 0; r < GRID_SIZE; r++) {
@@ -67,17 +70,22 @@ void loadShape(int shapeNum) {
         }
     } 
     else if (shapeNum == 2) {
-        // SHAPE 2: The Patch Room (Highlights Color Sensitivity)
-        // Large boundary box filled with a solid interior cyan patch color.
+        // SHAPE 2: Multicolored Border Room (Boundary Fill Leaking Stress Test)
+        
+        // 1. Draw Horizontal Walls (Top & Bottom) -> Red
         for (int i = 8; i <= 32; i++) {
-            grid[8][i] = BOUNDARY;
-            grid[32][i] = BOUNDARY;
-            grid[i][8] = BOUNDARY;
-            grid[i][32] = BOUNDARY;
+            grid[8][i] = WALL_RED;
+            grid[32][i] = WALL_RED;
         }
+        // 2. Draw Vertical Walls (Left & Right) -> Purple
+        for (int i = 8; i <= 32; i++) {
+            grid[i][8] = WALL_PURPLE;
+            grid[i][32] = WALL_PURPLE;
+        }
+        // 3. Paint the Interior -> Amber Yellow
         for (int r = 9; r <= 31; r++) {
             for (int c = 9; c <= 31; c++) {
-                grid[r][c] = PATCH;
+                grid[r][c] = INTERIOR_YELLOW;
             }
         }
     } 
@@ -124,7 +132,7 @@ void drawUI() {
     renderText(620, 505, "Active Shape:");
     glColor3f(0.00f, 0.65f, 0.90f);
     if (currentShape == 1)      renderText(620, 485, "-> [ 1 ] Simple Closed Room");
-    else if (currentShape == 2) renderText(620, 485, "-> [ 2 ] Homogeneous Patch Box");
+    else if (currentShape == 2) renderText(620, 485, "-> [ 2 ] Multicolor Border Box");
     else if (currentShape == 3) renderText(620, 485, "-> [ 3 ] Two-Tone Divided Core");
 
     glColor3fv(COLOR_TEXT);
@@ -154,7 +162,7 @@ void drawUI() {
     
     renderText(620, 165, "Select Test Shape:");
     renderText(620, 145, "1 - Clear Framing Room");
-    renderText(620, 125, "2 - Full Cyan Patch");
+    renderText(620, 125, "2 - Multicolor Border");
     renderText(620, 105, "3 - Divided Core Structure");
 
     renderText(620, 40, "ESC - Exit System");
@@ -171,8 +179,11 @@ void display() {
             int y1 = r * CELL_SIZE;
 
             // Compute Color States
-            if (grid[r][c] == BOUNDARY)       glColor3fv(COLOR_BOUND);
-            else if (grid[r][c] == PATCH)      glColor3fv(COLOR_PATCH);
+            if (grid[r][c] == BOUNDARY)             glColor3fv(COLOR_BOUND);
+            else if (grid[r][c] == PATCH)           glColor3fv(COLOR_PATCH);
+            else if (grid[r][c] == WALL_RED)        glColor3fv(COLOR_WALL_RED);
+            else if (grid[r][c] == WALL_PURPLE)     glColor3fv(COLOR_WALL_PURPLE);
+            else if (grid[r][c] == INTERIOR_YELLOW) glColor3fv(COLOR_INT_YELLOW);
             else if (grid[r][c] == FILLED) {
                 glColor3fv(currentMode == FLOOD_FILL ? COLOR_FLOOD : COLOR_BOUNDARY);
             } else glColor3fv(COLOR_BG);
@@ -252,7 +263,10 @@ void mouse(int button, int state, int x, int y) {
             gridY = std::max(0, std::min(gridY, GRID_SIZE - 1));
 
             // Prevent processing if seeding falls directly onto standard barriers
-            if (grid[gridY][gridX] == BOUNDARY || grid[gridY][gridX] == FILLED) return;
+            if (grid[gridY][gridX] == BOUNDARY || 
+                grid[gridY][gridX] == WALL_RED || 
+                grid[gridY][gridX] == WALL_PURPLE || 
+                grid[gridY][gridX] == FILLED) return;
 
             targetColor = grid[gridY][gridX];
 
